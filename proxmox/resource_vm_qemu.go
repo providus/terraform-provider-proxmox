@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"path"
 	"regexp"
 	"strconv"
@@ -74,6 +75,12 @@ func resourceVmQemu() *schema.Resource {
 				Optional:    true,
 				Default:     false,
 				Description: "VM autostart on boot",
+			},
+			"startup": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Default:     "",
+				Description: "Startup order of the VM",
 			},
 			"oncreate": {
 				Type:        schema.TypeBool,
@@ -328,7 +335,7 @@ func resourceVmQemu() *schema.Resource {
 							ValidateFunc: func(val interface{}, key string) (warns []string, errs []error) {
 								v := val.(string)
 								if !(strings.Contains(v, "G") || strings.Contains(v, "M") || strings.Contains(v, "K")) {
-									errs = append(errs, fmt.Errorf("disk size must end in G, M, or K, got %s", v))
+									errs = append(errs, fmt.Errorf("disk size must end with G, M, or K, got %s", v))
 								}
 								return
 							},
@@ -406,6 +413,52 @@ func resourceVmQemu() *schema.Resource {
 							Default:  0,
 						},
 						"mbps_wr_max": {
+							Type:     schema.TypeInt,
+							Optional: true,
+							Default:  0,
+						},
+						// Maximum I/O operations per second
+						"iops": {
+							Type:     schema.TypeInt,
+							Optional: true,
+							Default:  0,
+						},
+						"iops_max": {
+							Type:     schema.TypeInt,
+							Optional: true,
+							Default:  0,
+						},
+						"iops_max_length": {
+							Type:     schema.TypeInt,
+							Optional: true,
+							Default:  0,
+						},
+						"iops_rd": {
+							Type:     schema.TypeInt,
+							Optional: true,
+							Default:  0,
+						},
+						"iops_rd_max": {
+							Type:     schema.TypeInt,
+							Optional: true,
+							Default:  0,
+						},
+						"iops_rd_max_length": {
+							Type:     schema.TypeInt,
+							Optional: true,
+							Default:  0,
+						},
+						"iops_wr": {
+							Type:     schema.TypeInt,
+							Optional: true,
+							Default:  0,
+						},
+						"iops_wr_max": {
+							Type:     schema.TypeInt,
+							Optional: true,
+							Default:  0,
+						},
+						"iops_wr_max_length": {
 							Type:     schema.TypeInt,
 							Optional: true,
 							Default:  0,
@@ -656,6 +709,56 @@ func resourceVmQemu() *schema.Resource {
 				Optional: true,
 				ForceNew: true,
 			},
+			"ipconfig6": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
+			"ipconfig7": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
+			"ipconfig8": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
+			"ipconfig9": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
+			"ipconfig10": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
+			"ipconfig11": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
+			"ipconfig12": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
+			"ipconfig13": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
+			"ipconfig14": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
+			"ipconfig15": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
 			"preprovision": {
 				Type:       schema.TypeBool,
 				Deprecated: "do not use anymore",
@@ -682,7 +785,7 @@ func resourceVmQemu() *schema.Resource {
 			"reboot_required": {
 				Type:        schema.TypeBool,
 				Computed:    true,
-				Description: "Internal variable, true if any of the modified parameters require a reboot to take effect.",
+				Description: "Internal variable, true if any of the modified parameters requires a reboot to take effect.",
 			},
 			"default_ipv4_address": {
 				Type:        schema.TypeString,
@@ -704,7 +807,7 @@ func resourceVmQemu() *schema.Resource {
 				Type:        schema.TypeBool,
 				Optional:    true,
 				Default:     true,
-				Description: "Automatically reboot the VM if any of the modified parameters require a reboot to take effect.",
+				Description: "Automatically reboot the VM if any of the modified parameters requires a reboot to take effect.",
 			},
 		},
 		Timeouts: resourceTimeouts(),
@@ -719,7 +822,8 @@ func resourceVmQemuCreate(d *schema.ResourceData, meta interface{}) error {
 	// DEBUG print out the create request
 	flatValue, _ := resourceDataToFlatValues(d, thisResource)
 	jsonString, _ := json.Marshal(flatValue)
-	logger.Debug().Str("vmid", d.Id()).Msgf("Invoking VM create with resource data:  '%+v'", string(jsonString))
+	logger.Info().Str("vmid", d.Id()).Msgf("VM creation")
+	logger.Debug().Str("vmid", d.Id()).Msgf("VM creation resource data: '%+v'", string(jsonString))
 
 	pconf := meta.(*providerConfiguration)
 	lock := pmParallelBegin(pconf)
@@ -743,6 +847,7 @@ func resourceVmQemuCreate(d *schema.ResourceData, meta interface{}) error {
 		Pool:         d.Get("pool").(string),
 		Bios:         d.Get("bios").(string),
 		Onboot:       d.Get("onboot").(bool),
+		Startup:      d.Get("startup").(string),
 		Tablet:       d.Get("tablet").(bool),
 		Boot:         d.Get("boot").(string),
 		BootDisk:     d.Get("bootdisk").(string),
@@ -779,6 +884,16 @@ func resourceVmQemuCreate(d *schema.ResourceData, meta interface{}) error {
 		Ipconfig3:    d.Get("ipconfig3").(string),
 		Ipconfig4:    d.Get("ipconfig4").(string),
 		Ipconfig5:    d.Get("ipconfig5").(string),
+		Ipconfig6:    d.Get("ipconfig6").(string),
+		Ipconfig7:    d.Get("ipconfig7").(string),
+		Ipconfig8:    d.Get("ipconfig8").(string),
+		Ipconfig9:    d.Get("ipconfig9").(string),
+		Ipconfig10:   d.Get("ipconfig10").(string),
+		Ipconfig11:   d.Get("ipconfig11").(string),
+		Ipconfig12:   d.Get("ipconfig12").(string),
+		Ipconfig13:   d.Get("ipconfig13").(string),
+		Ipconfig14:   d.Get("ipconfig14").(string),
+		Ipconfig15:   d.Get("ipconfig15").(string),
 		// Deprecated single disk config.
 		Storage:  d.Get("storage").(string),
 		DiskSize: d.Get("disk_gb").(float64),
@@ -900,7 +1015,7 @@ func resourceVmQemuCreate(d *schema.ResourceData, meta interface{}) error {
 		} else if d.Get("pxe").(bool) {
 			var found bool
 			bs := d.Get("boot").(string)
-			regs := [...]string{"^n.*$", "^order=net.*$"}
+			regs := [...]string{".*n.*$", "^order=.*net.*$"}
 
 			for _, reg := range regs {
 				re, err := regexp.Compile(reg)
@@ -969,6 +1084,8 @@ func resourceVmQemuCreate(d *schema.ResourceData, meta interface{}) error {
 		if err != nil {
 			return err
 		}
+		//wait 10s for the vm to start
+		time.Sleep(10 * time.Second)
 
 		err = initConnInfo(d, pconf, client, vmr, &config, lock)
 		if err != nil {
@@ -1051,6 +1168,7 @@ func resourceVmQemuUpdate(ctx context.Context, d *schema.ResourceData, meta inte
 		Pool:         d.Get("pool").(string),
 		Bios:         d.Get("bios").(string),
 		Onboot:       d.Get("onboot").(bool),
+		Startup:      d.Get("startup").(string),
 		Tablet:       d.Get("tablet").(bool),
 		Boot:         d.Get("boot").(string),
 		BootDisk:     d.Get("bootdisk").(string),
@@ -1087,6 +1205,16 @@ func resourceVmQemuUpdate(ctx context.Context, d *schema.ResourceData, meta inte
 		Ipconfig3:    d.Get("ipconfig3").(string),
 		Ipconfig4:    d.Get("ipconfig4").(string),
 		Ipconfig5:    d.Get("ipconfig5").(string),
+		Ipconfig6:    d.Get("ipconfig6").(string),
+		Ipconfig7:    d.Get("ipconfig7").(string),
+		Ipconfig8:    d.Get("ipconfig8").(string),
+		Ipconfig9:    d.Get("ipconfig9").(string),
+		Ipconfig10:   d.Get("ipconfig10").(string),
+		Ipconfig11:   d.Get("ipconfig11").(string),
+		Ipconfig12:   d.Get("ipconfig12").(string),
+		Ipconfig13:   d.Get("ipconfig13").(string),
+		Ipconfig14:   d.Get("ipconfig14").(string),
+		Ipconfig15:   d.Get("ipconfig15").(string),
 		// Deprecated single disk config.
 		Storage:  d.Get("storage").(string),
 		DiskSize: d.Get("disk_gb").(float64),
@@ -1160,6 +1288,16 @@ func resourceVmQemuUpdate(ctx context.Context, d *schema.ResourceData, meta inte
 		"ipconfig3",
 		"ipconfig4",
 		"ipconfig5",
+		"ipconfig6",
+		"ipconfig7",
+		"ipconfig8",
+		"ipconfig9",
+		"ipconfig10",
+		"ipconfig11",
+		"ipconfig12",
+		"ipconfig13",
+		"ipconfig14",
+		"ipconfig15",
 		"kvm",
 		"vga",
 		"serial",
@@ -1231,6 +1369,9 @@ func resourceVmQemuUpdate(ctx context.Context, d *schema.ResourceData, meta inte
 					d.Set("reboot_required", true)
 				}
 				if oldValues[i].(map[string]interface{})["cache"] != newValues[i].(map[string]interface{})["cache"] {
+					d.Set("reboot_required", true)
+				}
+				if oldValues[i].(map[string]interface{})["size"] != newValues[i].(map[string]interface{})["size"] {
 					d.Set("reboot_required", true)
 				}
 				// these paramater changes only require reboot if disk hotplug is disabled
@@ -1324,6 +1465,7 @@ func _resourceVmQemuRead(d *schema.ResourceData, meta interface{}) error {
 	// by calling a SetId("")
 	_, err = client.GetVmInfo(vmr)
 	if err != nil {
+		logger.Debug().Int("vmid", vmID).Err(err).Msg("failed to get vm info")
 		d.SetId("")
 		return nil
 	}
@@ -1353,6 +1495,7 @@ func _resourceVmQemuRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("desc", config.Description)
 	d.Set("bios", config.Bios)
 	d.Set("onboot", config.Onboot)
+	d.Set("startup", config.Startup)
 	d.Set("tablet", config.Tablet)
 	d.Set("boot", config.Boot)
 	d.Set("bootdisk", config.BootDisk)
@@ -1387,6 +1530,16 @@ func _resourceVmQemuRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("ipconfig3", config.Ipconfig3)
 	d.Set("ipconfig4", config.Ipconfig4)
 	d.Set("ipconfig5", config.Ipconfig5)
+	d.Set("ipconfig6", config.Ipconfig6)
+	d.Set("ipconfig7", config.Ipconfig7)
+	d.Set("ipconfig8", config.Ipconfig8)
+	d.Set("ipconfig9", config.Ipconfig9)
+	d.Set("ipconfig10", config.Ipconfig10)
+	d.Set("ipconfig11", config.Ipconfig11)
+	d.Set("ipconfig12", config.Ipconfig12)
+	d.Set("ipconfig13", config.Ipconfig13)
+	d.Set("ipconfig14", config.Ipconfig14)
+	d.Set("ipconfig15", config.Ipconfig15)
 
 	// Some dirty hacks to populate undefined keys with default values.
 	checkedKeys := []string{"force_create", "define_connection_info"}
@@ -1422,10 +1575,10 @@ func _resourceVmQemuRead(d *schema.ResourceData, meta interface{}) error {
 		if qemuDisk["cache"] == "" || qemuDisk["cache"] == nil {
 			qemuDisk["cache"] = "none"
 		}
-		if qemuDisk["backup"] == 0 {
-			qemuDisk["backup"] = false
-		} else if qemuDisk["backup"] == 1 {
-			qemuDisk["backup"] = true
+		if qemuDisk["backup"] == false {
+			qemuDisk["backup"] = 0
+		} else if qemuDisk["backup"] == true {
+			qemuDisk["backup"] = 1
 		}
 	}
 
@@ -1497,8 +1650,7 @@ func _resourceVmQemuRead(d *schema.ResourceData, meta interface{}) error {
 	if err == nil {
 		for _, poolInfo := range pools["data"].([]interface{}) {
 			poolContent, _ := client.GetPoolInfo(poolInfo.(map[string]interface{})["poolid"].(string))
-			poolMembers := poolContent["data"].(map[string]interface{})["members"]
-			for _, member := range poolMembers.([]interface{}) {
+			for _, member := range poolContent["members"].([]interface{}) {
 				if member.(map[string]interface{})["type"] != "storage" {
 					if vmID == int(member.(map[string]interface{})["vmid"].(float64)) {
 						d.Set("pool", poolInfo.(map[string]interface{})["poolid"].(string))
@@ -1576,20 +1728,21 @@ func prepareDiskSize(
 			return err
 		}
 
-		logger.Debug().Int("diskId", diskID).Msgf("Checking disk sizing. Original '%+v', New '%+v'", diskSize, clonedDiskSize)
+		logger.Debug().Int("diskId", diskID).Msgf("Checking disk sizing. Original '%+v', New '%+v'", fmt.Sprintf("%vG", clonedDiskSize), fmt.Sprintf("%vG", diskSize))
 		if diskSize > clonedDiskSize {
-			logger.Debug().Int("diskId", diskID).Msgf("Resizing disk. Original '%+v', New '%+v'", diskSize, clonedDiskSize)
+			logger.Debug().Int("diskId", diskID).Msgf("Resizing disk")
 			for ii := 0; ii < 5; ii++ {
-				_, err = client.ResizeQemuDisk(vmr, diskName, int(diskSize-clonedDiskSize))
+				_, err = client.ResizeQemuDiskRaw(vmr, diskName, fmt.Sprintf("%vG", diskSize))
 				if err == nil {
 					break
 				}
+				logger.Debug().Int("diskId", diskID).Msgf("Error returned from api: %+v", err)
 				time.Sleep(time.Duration(10) * time.Second)
 			}
 		} else if diskSize == clonedDiskSize || diskSize <= 0 {
-			logger.Debug().Int("diskId", diskID).Msgf("Disk is same size as before, skipping resize. Original '%+v', New '%+v'", diskSize, clonedDiskSize)
+			logger.Debug().Int("diskId", diskID).Msgf("Disk is same size as before, skipping resize. Original '%+v', New '%+v'", fmt.Sprintf("%vG", clonedDiskSize), fmt.Sprintf("%vG", diskSize))
 		} else {
-			return fmt.Errorf("proxmox does not support decreasing disk size. Disk '%v' wanted to go from '%vG' to '%vG'", diskName, clonedDiskSize, diskSize)
+			return fmt.Errorf("proxmox does not support decreasing disk size. Disk '%v' wanted to go from '%vG' to '%vG'", diskName, fmt.Sprintf("%vG", clonedDiskSize), fmt.Sprintf("%vG", diskSize))
 		}
 
 	}
@@ -1726,20 +1879,27 @@ func initConnInfo(
 	lock *pmApiLockHolder,
 ) error {
 
+	logger, _ := CreateSubLogger("initConnInfo")
+
 	var err error
 	var lasterr error
+	var interfaces []pxapi.AgentNetworkInterface
 	// allow user to opt-out of setting the connection info for the resource
 	if !d.Get("define_connection_info").(bool) {
-		log.Printf("[DEBUG][initConnInfo] define_connection_info is %t, no further action\n", d.Get("define_connection_info").(bool))
+		log.Printf("[INFO][initConnInfo] define_connection_info is %t, no further action", d.Get("define_connection_info").(bool))
+		logger.Info().Int("vmid", vmr.VmId()).Msgf("define_connection_info is %t, no further action", d.Get("define_connection_info").(bool))
+
 		return nil
 	}
 	// allow user to opt-out of setting the connection info for the resource
 	if d.Get("agent") != 1 {
-		log.Printf("[DEBUG][initConnInfo] qemu agent is disabled from proxmox config, cant comunicate with vm.")
+		log.Printf("[INFO][initConnInfo] qemu agent is disabled from proxmox config, cant comunicate with vm.")
+		logger.Info().Int("vmid", vmr.VmId()).Msgf("qemu agent is disabled from proxmox config, cant comunicate with vm.")
 		return nil
 	}
 
-	log.Print("[DEBUG][initConnInfo] trying to get vm ip address for provisioner")
+	log.Print("[INFO][initConnInfo] trying to get vm ip address for provisioner")
+	logger.Info().Int("vmid", vmr.VmId()).Msgf("trying to get vm ip address for provisioner")
 	sshPort := "22"
 	sshHost := ""
 	// assume guest agent not running yet or not enabled
@@ -1748,17 +1908,24 @@ func initConnInfo(
 	// wait until the os has started the guest agent
 	guestAgentTimeout := d.Timeout(schema.TimeoutCreate)
 	guestAgentWaitEnd := time.Now().Add(time.Duration(guestAgentTimeout))
-	log.Printf("[DEBUG][initConnInfo] retrying for at most  %v minutes before giving up\n", guestAgentTimeout)
-	log.Printf("[DEBUG][initConnInfo] retries will end at %s\n", guestAgentWaitEnd)
+	log.Printf("[DEBUG][initConnInfo] retrying for at most  %v minutes before giving up", guestAgentTimeout)
+	log.Printf("[DEBUG][initConnInfo] retries will end at %s", guestAgentWaitEnd)
+	logger.Debug().Int("vmid", vmr.VmId()).Msgf("retrying for at most  %v minutes before giving up", guestAgentTimeout)
+	logger.Debug().Int("vmid", vmr.VmId()).Msgf("retries will end at %s", guestAgentWaitEnd)
 
 	for time.Now().Before(guestAgentWaitEnd) {
-		_, err := client.GetVmAgentNetworkInterfaces(vmr)
+		interfaces, err = client.GetVmAgentNetworkInterfaces(vmr)
 		lasterr = err
 		if err != nil {
-			log.Printf("[DEBUG][initConnInfo] check ip result error %s\n", err.Error())
+			log.Printf("[DEBUG][initConnInfo] check ip result error %s", err.Error())
+			logger.Debug().Int("vmid", vmr.VmId()).Msgf("check ip result error %s", err.Error())
 		} else if err == nil {
 			lasterr = nil
-			log.Print("[DEBUG][initConnInfo] found working QEMU Agent")
+			log.Print("[INFO][initConnInfo] found working QEMU Agent")
+			log.Printf("[DEBUG][initConnInfo] interfaces found: %v", interfaces)
+			logger.Info().Int("vmid", vmr.VmId()).Msgf("found working QEMU Agent")
+			logger.Debug().Int("vmid", vmr.VmId()).Msgf("interfaces found: %v", interfaces)
+
 			guestAgentRunning = true
 			break
 		} else if !strings.Contains(err.Error(), "500 QEMU guest agent is not running") {
@@ -1769,33 +1936,45 @@ func initConnInfo(
 		time.Sleep(10 * time.Second)
 	}
 	if lasterr != nil {
+		log.Printf("[INFO][initConnInfo] error from PVE: \"%s\"\n, QEMU Agent is enabled in you configuration but non installed/not working on your vm", lasterr)
+		logger.Info().Int("vmid", vmr.VmId()).Msgf("error from PVE: \"%s\"\n, QEMU Agent is enabled in you configuration but non installed/not working on your vm", lasterr)
 		return fmt.Errorf("error from PVE: \"%s\"\n, QEMU Agent is enabled in you configuration but non installed/not working on your vm", lasterr)
 	}
 	vmConfig, err := client.GetVmConfig(vmr)
 	if err != nil {
 		return err
 	}
-	log.Print("[DEBUG][initConnInfo] trying to find IP address of first network card")
+	log.Print("[INFO][initConnInfo] trying to find IP address of first network card")
+	logger.Info().Int("vmid", vmr.VmId()).Msgf("trying to find IP address of first network card")
 
 	// wait until we find a valid ipv4 address
+	log.Printf("[DEBUG][initConnInfo] checking network card...")
+	logger.Debug().Int("vmid", vmr.VmId()).Msgf("checking network card...")
 	for guestAgentRunning && time.Now().Before(guestAgentWaitEnd) {
 		log.Printf("[DEBUG][initConnInfo] checking network card...")
+		interfaces, err = client.GetVmAgentNetworkInterfaces(vmr)
 		net0MacAddress := macAddressRegex.FindString(vmConfig["net0"].(string))
-		interfaces, err := client.GetVmAgentNetworkInterfaces(vmr)
 		if err != nil {
-			return err
+			log.Printf("[DEBUG][initConnInfo] checking network card error %s", err.Error())
+			logger.Debug().Int("vmid", vmr.VmId()).Msgf("checking network card error %s", err.Error())
+			//return err
 		} else {
+			log.Printf("[DEBUG][initConnInfo] checking network card loop")
+			logger.Debug().Int("vmid", vmr.VmId()).Msgf("checking network card loop")
 			for _, iface := range interfaces {
 				if strings.EqualFold(strings.ToUpper(iface.MACAddress), strings.ToUpper(net0MacAddress)) {
 					for _, addr := range iface.IPAddresses {
 						if addr.IsGlobalUnicast() && strings.Count(addr.String(), ":") < 2 {
 							log.Printf("[DEBUG][initConnInfo] Found IP address: %s", addr.String())
+							logger.Debug().Int("vmid", vmr.VmId()).Msgf("Found IP address: %s", addr.String())
 							sshHost = addr.String()
 						}
 					}
 				}
 			}
 			if sshHost != "" {
+				log.Printf("[DEBUG][initConnInfo] sshHost not empty: %s", sshHost)
+				logger.Debug().Int("vmid", vmr.VmId()).Msgf("sshHost not empty: %s", sshHost)
 				break
 			}
 		}
@@ -1803,27 +1982,50 @@ func initConnInfo(
 	}
 	// todo - log a warning if we couldn't get an IP
 
-	d.Set("default_ipv4_address", sshHost)
-
 	if config.HasCloudInit() {
 		log.Print("[DEBUG][initConnInfo] vm has a cloud-init configuration")
-		if sshHost == "" {
-			log.Print("[DEBUG][initConnInfo] not found an ip configuration yet")
-			_, ipconfig0Set := d.GetOk("ipconfig0")
-			if ipconfig0Set {
-				vmState, err := client.GetVmState(vmr)
+		logger.Debug().Int("vmid", vmr.VmId()).Msgf(" vm has a cloud-init configuration")
+		_, ipconfig0Set := d.GetOk("ipconfig0")
+		if ipconfig0Set {
+			vmState, err := client.GetVmState(vmr)
+			log.Printf("[DEBUG][initConnInfo] cloudinitcheck vm state %v", vmState)
+			logger.Debug().Int("vmid", vmr.VmId()).Msgf("cloudinitcheck vm state %v", vmState)
+			if err != nil {
+				log.Printf("[DEBUG][initConnInfo] vmstate error %s", err.Error())
+				logger.Debug().Int("vmid", vmr.VmId()).Msgf("vmstate error %s", err.Error())
+				return err
+			}
+
+			if d.Get("ipconfig0").(string) != "ip=dhcp" || vmState["agent"] == nil || vmState["agent"].(float64) != 1 {
+				// parse IP address out of ipconfig0
+				ipMatch := rxIPconfig.FindStringSubmatch(d.Get("ipconfig0").(string))
+				if sshHost == "" {
+					sshHost = ipMatch[1]
+				}
+				ipconfig0 := net.ParseIP(strings.Split(ipMatch[1], ":")[0])
+				interfaces, err = client.GetVmAgentNetworkInterfaces(vmr)
+				log.Printf("[DEBUG][initConnInfo] ipconfig0 interfaces: %v", interfaces)
+				logger.Debug().Int("vmid", vmr.VmId()).Msgf("ipconfig0 interfaces %v", interfaces)
 				if err != nil {
 					return err
-				}
-
-				if d.Get("ipconfig0").(string) != "ip=dhcp" || vmState["agent"] == nil || vmState["agent"].(float64) != 1 {
-					// parse IP address out of ipconfig0
-					ipMatch := rxIPconfig.FindStringSubmatch(d.Get("ipconfig0").(string))
-					sshHost = ipMatch[1]
+				} else {
+					for _, iface := range interfaces {
+						if sshHost == ipMatch[1] {
+							break
+						}
+						for _, addr := range iface.IPAddresses {
+							if addr.Equal(ipconfig0) {
+								sshHost = ipMatch[1]
+								break
+							}
+						}
+					}
 				}
 			}
 		}
-		log.Print("[DEBUG]  found an ip configuration")
+
+		log.Print("[DEBUG][initConnInfo] found an ip configuration")
+		logger.Debug().Int("vmid", vmr.VmId()).Msgf("Found an ip configuration")
 		// Check if we got a speficied port
 		if strings.Contains(sshHost, ":") {
 			sshParts := strings.Split(sshHost, ":")
@@ -1847,10 +2049,16 @@ func initConnInfo(
 	// Done with proxmox API, end parallel and do the SSH things
 	//lock.unlock()
 	if sshHost == "" {
+		log.Print("[DEBUG][initConnInfo] Cannot find any IP address")
+		logger.Debug().Int("vmid", vmr.VmId()).Msgf("Cannot find any IP address")
 		return fmt.Errorf("cannot find any IP address")
 	}
 
+	log.Printf("[DEBUG][initConnInfo] this is the vm configuration: %s %s", sshHost, sshPort)
+	logger.Debug().Int("vmid", vmr.VmId()).Msgf("this is the vm configuration: %s %s", sshHost, sshPort)
+
 	// Optional convience attributes for provisioners
+	d.Set("default_ipv4_address", sshHost)
 	d.Set("ssh_host", sshHost)
 	d.Set("ssh_port", sshPort)
 

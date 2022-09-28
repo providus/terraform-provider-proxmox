@@ -61,6 +61,7 @@ func resourceLxc() *schema.Resource {
 			"cores": {
 				Type:     schema.TypeInt,
 				Optional: true,
+				Default:  1,
 			},
 			"cpulimit": {
 				Type:     schema.TypeInt,
@@ -85,18 +86,27 @@ func resourceLxc() *schema.Resource {
 						"fuse": {
 							Type:     schema.TypeBool,
 							Optional: true,
+							Default:  false,
 						},
 						"keyctl": {
 							Type:     schema.TypeBool,
 							Optional: true,
+							Default:  false,
+						},
+						"mknod": {
+							Type:     schema.TypeBool,
+							Optional: true,
+							Default:  false,
 						},
 						"mount": {
 							Type:     schema.TypeString,
 							Optional: true,
+							Default:  "",
 						},
 						"nesting": {
 							Type:     schema.TypeBool,
 							Optional: true,
+							Default:  false,
 						},
 					},
 				},
@@ -316,6 +326,26 @@ func resourceLxc() *schema.Resource {
 				Optional: true,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
+						"acl": {
+							Type:     schema.TypeBool,
+							Optional: true,
+						},
+						"quota": {
+							Type:     schema.TypeBool,
+							Optional: true,
+						},
+						"replicate": {
+							Type:     schema.TypeBool,
+							Optional: true,
+						},
+						"ro": {
+							Type:     schema.TypeBool,
+							Optional: true,
+						},
+						"shared": {
+							Type:     schema.TypeBool,
+							Optional: true,
+						},
 						"storage": {
 							Type:     schema.TypeString,
 							ForceNew: true,
@@ -360,7 +390,7 @@ func resourceLxc() *schema.Resource {
 			"swap": {
 				Type:     schema.TypeInt,
 				Optional: true,
-				Default:  512,
+				Default:  0,
 			},
 			"template": {
 				Type:     schema.TypeBool,
@@ -393,9 +423,12 @@ func resourceLxc() *schema.Resource {
 				ForceNew: true,
 			},
 			"vmid": {
-				Type:     schema.TypeInt,
-				Optional: true,
-				Default:  0,
+				Type:             schema.TypeInt,
+				Optional:         true,
+				Computed:         true,
+				ForceNew:         true,
+				ValidateDiagFunc: VMIDValidator(),
+				Description:      "The VM identifier in proxmox (100-999999999)",
 			},
 		},
 		Timeouts: resourceTimeouts(),
@@ -524,6 +557,40 @@ func resourceLxcCreate(d *schema.ResourceData, meta interface{}) error {
 			time.Sleep(5 * time.Second)
 			log.Print("[DEBUG][LxcCreate] Clone still not ready, checking again")
 		}
+		if config_post_clone.RootFs["size"] == config.RootFs["size"] {
+			log.Print("[DEBUG][LxcCreate] Waiting for clone becoming ready")
+		} else {
+			log.Print("[DEBUG][LxcCreate] We must resize")
+			processDiskResize(config_post_clone.RootFs, config.RootFs, "rootfs", pconf, vmr)
+		}
+		config_post_resize, err := pxapi.NewConfigLxcFromApi(vmr, client)
+		if err != nil {
+			return err
+		}
+		config.RootFs["size"] = config_post_resize.RootFs["size"]
+		config.RootFs["volume"] = config_post_resize.RootFs["volume"]
+
+		if err != nil {
+			return err
+		}
+		
+		// Update all remaining stuff
+		err = config.UpdateConfig(vmr, client)
+		if err != nil {
+			return err
+		}
+		
+		//Start LXC if start parameter is set to true
+		if d.Get("start").(bool) {
+	  		log.Print("[DEBUG][LxcCreate] starting LXC")
+	  		_, err := client.StartVm(vmr)
+			if err != nil {
+				return err
+			}
+
+		} else {
+			log.Print("[DEBUG][LxcCreate] start = false, not starting LXC")
+    		}
 
 	} else {
 		err = config.CreateLxc(vmr, client)
@@ -535,6 +602,7 @@ func resourceLxcCreate(d *schema.ResourceData, meta interface{}) error {
 	// The existence of a non-blank ID is what tells Terraform that a resource was created
 	d.SetId(resourceId(targetNode, "lxc", vmr.VmId()))
 
+	lock.unlock()
 	return resourceLxcRead(d, meta)
 
 }
@@ -650,7 +718,28 @@ func resourceLxcUpdate(d *schema.ResourceData, meta interface{}) error {
 			return err
 		}
 	}
+	
+	if d.HasChange("start") {
+		vmState, err := client.GetVmState(vmr)
+		if err == nil && vmState["status"] == "stopped" && d.Get("start").(bool) {
+			log.Print("[DEBUG][LXCUpdate] starting LXC")
+			_, err = client.StartVm(vmr)
+			if err != nil {
+				return err
+			}
 
+		} else if err == nil && vmState["status"] == "running" && !d.Get("start").(bool) {
+			log.Print("[DEBUG][LXCUpdate] stopping LXC")
+			_, err = client.StopVm(vmr)
+			if err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+	}
+
+	lock.unlock()
 	return resourceLxcRead(d, meta)
 }
 
@@ -738,8 +827,7 @@ func _resourceLxcRead(d *schema.ResourceData, meta interface{}) error {
 	if err == nil {
 		for _, poolInfo := range pools["data"].([]interface{}) {
 			poolContent, _ := client.GetPoolInfo(poolInfo.(map[string]interface{})["poolid"].(string))
-			poolMembers := poolContent["data"].(map[string]interface{})["members"]
-			for _, member := range poolMembers.([]interface{}) {
+			for _, member := range poolContent["members"].([]interface{}) {
 				if member.(map[string]interface{})["type"] != "storage" {
 					if vmID == int(member.(map[string]interface{})["vmid"].(float64)) {
 						d.Set("pool", poolInfo.(map[string]interface{})["poolid"].(string))

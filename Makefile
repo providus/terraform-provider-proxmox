@@ -40,16 +40,22 @@ CURRENT_TAG_MICRO  := "v$(CURRENT_VERSION_MICRO)"
 CURRENT_TAG_MINOR  := "v$(CURRENT_VERSION_MINOR)"
 CURRENT_TAG_MAJOR  := "v$(CURRENT_VERSION_MAJOR)"
 
-KERNEL=$(shell if [ "$$(uname -s)" == "Linux" ]; then echo linux; fi)
-ARCH=$(shell if [ "$$(uname -m)" == "x86_64" ]; then echo amd64; fi)
+uname_s := $(shell uname -s)
+uname_m := $(shell uname -m)
+l_uname_s = $(shell echo $(uname_s) | tr A-Z a-z)
+l_uname_m = $(shell echo $(uname_m) | tr A-Z a-z)
 
-# $(info $$KERNEL = $(KERNEL))
+KERNEL=$(l_uname_s)
+ARCH=$(l_uname_m)
 
-# $(error $$ARCH = $(ARCH))
-
-.PHONY: build fmt vet test clean install acctest local-dev-install
+.PHONY: build info fmt vet test clean install acctest local-dev-install
 
 all: build
+
+info:
+	@echo "Global info"
+	@echo "$(KERNEL)"
+	@echo "$(ARCH)"		
 
 fmt:
 	@echo " -> checking code style"
@@ -69,19 +75,18 @@ build: clean
 	CGO_ENABLED=0 go build -trimpath -o bin/terraform-provider-proxmox
 	@echo "Built terraform-provider-proxmox"
 
+# to run only certain tests, run something of the form:  make acctest TESTARGS='-run=TestAccProxmoxVmQemu_DiskSlot'
 acctest: build
-	# to run only certain tests, run something of the form:  make acctest TESTARGS='-run=TestAccProxmoxVmQemu_DiskSlot'
 	TF_ACC=1 go test ./proxmox $(TESTARGS)
 
 install: build
 	cp bin/terraform-provider-proxmox $$GOPATH/bin/terraform-provider-proxmox
 
 local-dev-install: build
-	@echo "$(CURRENT_VERSION_MICRO)"
-	@echo "$(KERNEL)"
-	@echo "$(ARCH)"
-	mkdir -p ~/.terraform.d/plugins/localhost/telmate/proxmox/$(CURRENT_VERSION_MICRO)/$(KERNEL)_$(ARCH)/
-	cp bin/terraform-provider-proxmox ~/.terraform.d/plugins/localhost/telmate/proxmox/$(CURRENT_VERSION_MICRO)/$(KERNEL)_$(ARCH)/
+	@echo "Building this release $(CURRENT_VERSION_MICRO) on $(KERNEL)/$(ARCH)"
+	mkdir -p ~/.terraform.d/plugins/localhost/telmate/proxmox/$(MAJOR).$(MINOR).$(NEXT_MICRO)/$(KERNEL)_$(ARCH)/
+	cp bin/terraform-provider-proxmox ~/.terraform.d/plugins/localhost/telmate/proxmox/$(MAJOR).$(MINOR).$(NEXT_MICRO)/$(KERNEL)_$(ARCH)/
+
 
 clean:
 	@git clean -f -d

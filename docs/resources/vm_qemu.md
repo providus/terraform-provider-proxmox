@@ -86,8 +86,9 @@ Cloud-init VMs must be cloned from a [cloud-init ready template](https://pve.pro
 creating a resource that is using Cloud-Init, there are multi configurations possible. You can use either the `ciconfig`
 parameter to create based
 on [a Cloud-init configuration file](https://cloudinit.readthedocs.io/en/latest/topics/examples.html) or use the Proxmox
-variable `ciuser`, `cipassword`, `ipconfig0`, `ipconfig1`, `ipconfig2`, `ipconfig3`, `ipconfig4`, `ipconfig5`
-, `searchdomain`, `nameserver` and `sshkeys`.
+variable `ciuser`, `cipassword`, `ipconfig0`, `ipconfig1`, `ipconfig2`, `ipconfig3`, `ipconfig4`, `ipconfig5`,
+`ipconfig6`, `ipconfig7`, `ipconfig8`, `ipconfig9`, `ipconfig10`, `ipconfig11`, `ipconfig12`, `ipconfig13`,
+`ipconfig14`,`ipconfig15`, `searchdomain`, `nameserver` and `sshkeys`.
 
 For more information, see the [Cloud-init guide](../guides/cloud_init.md).
 
@@ -135,12 +136,13 @@ The following arguments are supported in the top level resource block.
 | `desc`                        | `str`  |                      | The description of the VM. Shows as the 'Notes' field in the Proxmox GUI.                                                                                                                                                                                                                                                   |
 | `define_connection_info`      | `bool` | `true`               | Whether to let terraform define the (SSH) connection parameters for preprovisioners, see config block below.                                                                                                                                                                                                                |
 | `bios`                        | `str`  | `"seabios"`          | The BIOS to use, options are `seabios` or `ovmf` for UEFI.                                                                                                                                                                                                                                                                  |
-| `onboot`                      | `bool` | `true`               | Whether to have the VM startup after the PVE node starts.                                                                                                                                                                                                                                                                   |
+| `onboot`                      | `bool` | `false`               | Whether to have the VM startup after the PVE node starts.                                                                                                                                                                                                                                                                   |
+| `startup`                      | `string` | `""`               | The [startup and shutdown behaviour](https://pve.proxmox.com/pve-docs/pve-admin-guide.html#pct_startup_and_shutdown)                                                                                                                                                                                                        |
 | `oncreate`                    | `bool` | `true`               | Whether to have the VM startup after the VM is created.                                                                                                                                                                                                                                                                     |
 | `tablet`                      | `bool` | `true`               | Enable/disable the USB tablet device. This device is usually needed to allow absolute mouse positioning with VNC.                                                                                                                                                                                                           |
 | `boot`                        | `str`  | `"cdn"`              | The boot order for the VM. Ordered string of characters denoting boot order. Options: floppy (`a`), hard disk (`c`), CD-ROM (`d`), or network (`n`).                                                                                                                                                                        |
 | `bootdisk`                    | `str`  |                      | Enable booting from specified disk. You shouldn't need to change it under most circumstances.                                                                                                                                                                                                                               |
-| `agent`                       | `int`  | `0`                  | Set to `1` to enable the QEMU Guest Agent. Note, you must run the [`qemu-guest-agent`](https://pve.proxmox.com/wiki/Qemu-guest-agent) daemon in the quest for this to have any effect.                                                                                                                                      |
+| `agent`                       | `int`  | `0`                  | Set to `1` to enable the QEMU Guest Agent. Note, you must run the [`qemu-guest-agent`](https://pve.proxmox.com/wiki/Qemu-guest-agent) daemon in the guest for this to have any effect.                                                                                                                                      |
 | `iso`                         | `str`  |                      | The name of the ISO image to mount to the VM. Only applies when `clone` is not set. Either `clone` or `iso` needs to be set.  Note that `iso` is mutually exclussive with `clone` and `pxe` modes.                                                                                                                          |
 | `pxe`                         | `bool` | `false`              | If set to `true`, enable PXE boot of the VM.  Also requires a `boot` order be set with Network first (eg `boot = "net0;scsi0"`).  Note that `pxe` is mutually exclussive with `iso` and `clone` modes.                                                                                                                      |
 | `clone`                       | `str`  |                      | The base VM from which to clone to create the new VM.  Note that `clone` is mutually exclussive with `pxe` and `iso` modes.                                                                                                                                                                                                 |
@@ -177,9 +179,6 @@ The following arguments are supported in the top level resource block.
 | `ipconfig0`                   | `str`  |                      | The first IP address to assign to the guest. Format: `[gw=<GatewayIPv4>] [,gw6=<GatewayIPv6>] [,ip=<IPv4Format/CIDR>] [,ip6=<IPv6Format/CIDR>]`.                                                                                                                                                                            |
 | `ipconfig1` to `ipconfig15`   | `str`  |                      | The second IP address to assign to the guest. Same format as `ipconfig0`.                                                                                                                                                                                                                                                   |
 | `automatic_reboot`            | `bool` | `true`               | Automatically reboot the VM when parameter changes require this. If disabled the provider will emit a warning when the VM needs to be rebooted.                                                                                                                                                                             |
-
-Note: Proxmox supports ipconfigN arbitrary numbers of interfaces, but at the moment this Terraform provider has support
-for 0-5 addresses only. If there is interest, this could be refactored to support any number of interfaces.
 
 ### VGA Block
 
@@ -331,3 +330,11 @@ The following arguments are deprecated, and should no longer be used.
 - `clone_wait` - (do not use, api should manage timeouts)
 - `additional_wait` - (do not use, api should manage timeouts)
 - `preprovision` - (do not use, provider do not fully support preprovisioning anymore)
+
+## Import
+
+A VM Qemu Resource can be imported using its node, type and VM ID i.e.:
+
+```
+$ terraform import [options] [node]/[type]/[vmId]
+```
